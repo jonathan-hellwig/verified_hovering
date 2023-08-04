@@ -4,7 +4,7 @@
     In recent years, the use of Unmanned Aerial Vehicles (UAVs) has increased significantly in applications such as surveillance, search and rescue, and package delivery. Ensuring savety in close proximity to humans is a major challenge for UAVs. Theorem proving and reachability analysis provide a way to obtain safety gurantees for controllers of cyber-physcial systems. While there has been work on both reachability analysis and theorem proving there is no work comparing them directly. In this paper, we conduct a case study to compare the two formal verification approaches to verifiy the safety of a  controller for a quadrotor UAV. We use the KeYmera X theorem prover and the reachability analysis tool SpaceEx. Further, we conduct an experimental evaluation of the controller on a real UAV. Our results show that while the theorem prover is able to verify the safety of the controller, the reachability analysis tool is not able to verify the safety of the controller.
 ]
 #let keywords = [
-    UAV, Formal verification, KeYmera X, Quadrotor, Hovering
+    UAV, Quadrotor, Formal verification, Theorem proving, Reachability analysis, KeYmera X, SpaceEx
 ]
 #let bibliography_file = "bibliography.bib"
 #show: doc => ieee(title, abstract,
