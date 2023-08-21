@@ -2,11 +2,6 @@ using JuMP
 using Plots
 import Ipopt
 
-const model_constants = (g=9.81, m=1, l=0.3, J=0.2 * 1 * 0.3 * 0.3)
-const constraint_constants = (box_width=0.9, u_min=0.2 * model_constants.g / model_constants.m, u_max=0.6 * model_constants.g / model_constants.m)
-const mpc_solver_constants = (N_state=6, T_final=1.0, N_iter=100, Q=10000.0, R=1.0)
-const simulation_constants = (T_final=5.0, dt=0.01)
-
 function generate_target_and_constraints(box_width)
     N_points = 1000
     t = LinRange(0, 1.0, N_points)
@@ -18,7 +13,7 @@ function generate_target_and_constraints(box_width)
 
     return target_x, target_y, constraint_x, constraint_y
 end
-function calculate_state_derivatives(s, u)
+function calculate_state_derivatives(s, u, model_constants)
     g, m, l, J = model_constants
     ddx = (u[1] + u[2]) / m * sin(s[3])
     ddz = (u[1] + u[2]) / m * cos(s[3]) - g
@@ -40,9 +35,8 @@ function generate_target_trajectory(t, n, dt)
     end
     return s_d
 end
-function model_predictive_control(t, s_current, s_old, u_old)
+function model_predictive_control(t, s_current, s_old, u_old, model_constants, constraint_constants, mpc_solver_constants)
     g, m, l, J = model_constants
-    # m += 0.1
 
     box_width, u_min, u_max = constraint_constants
 
@@ -87,8 +81,9 @@ function model_predictive_control(t, s_current, s_old, u_old)
     return value.(s), value.(u)
 end
 
-function simulation_loop()
+function simulation_loop(model_constants, constraint_constants, mpc_solver_constants, simulation_constants)
     s_current = [constraint_constants.box_width - 0.1, 0.0, 0.0, 0.0, 0.0, 0.0]'
+    s_filtered = s_current
     time = 0.0
     s_d = generate_target_trajectory(time, mpc_solver_constants.N_iter, simulation_constants.dt)
     s_old = zeros(100, 6)
@@ -102,9 +97,12 @@ function simulation_loop()
     push!(u_history, u_old[1, :])
     N_simulation = Int(simulation_constants.T_final / simulation_constants.dt)
     for i in 1:N_simulation
-        s, u = model_predictive_control(time, s_current, s_old, u_old)
+        state_noise = simulation_constants.noise_level * randn(6)'
+        state_noise[1, 3:end] .= 0.0
+        s, u = model_predictive_control(time, s_filtered, s_old, u_old, model_constants, constraint_constants, mpc_solver_constants)
         time += simulation_constants.dt
-        s_current = integrate_runge_kutta_4(calculate_state_derivatives, s_current[1, :], u[1, :], simulation_constants.dt)'
+        s_current = integrate_runge_kutta_4((s, u) -> calculate_state_derivatives(s, u, model_constants), s_current[1, :], u[1, :], simulation_constants.dt)'
+        s_filtered = (1.0 - simulation_constants.low_pass_factor) * s_filtered + simulation_constants.low_pass_factor * (s_current + state_noise)
         push!(s_history, s_current[1, :])
         push!(u_history, u[1, :])
         s_old = s
@@ -115,10 +113,14 @@ function simulation_loop()
     return s_history, u_history
 end
 
-s, u = simulation_loop()
+model_constants = (g=9.81, m=1, l=0.3, J=0.2 * 1 * 0.3 * 0.3)
+constraint_constants = (box_width=0.9, u_min=0.2 * model_constants.g / model_constants.m, u_max=0.6 * model_constants.g / model_constants.m)
+mpc_solver_constants = (N_state=6, T_final=1.0, N_iter=100, Q=10000.0, R=1.0)
+simulation_constants = (T_final=5.0, dt=0.01, noise_level=0.03, low_pass_factor=0.9)
+s, u = simulation_loop(model_constants, constraint_constants, mpc_solver_constants, simulation_constants)
 
 target_x, target_y, constraint_x, constraint_y = generate_target_and_constraints(constraint_constants.box_width)
-p = plot(target_x, target_y, label="Target trajectory", legend=:bottomleft, size=(600, 600))
+p = plot(target_x, target_y, label="Target trajectory", legend=:topright, size=(600, 600), xlabel="x", ylabel="z")
 p = scatter!(constraint_x, constraint_y, label="Constraint", markersize=0.2)
 p = scatter!(s[:, 1], s[:, 2], label="Actual trajectory", color=:red)
 display(p)
