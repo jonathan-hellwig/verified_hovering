@@ -77,6 +77,7 @@ function model_predictive_control(t, s_current, s_old, u_old, model_constants, c
     end
 
     @NLobjective(model, Min, sum(R * (u[i, 1]^2 + u[i, 2]^2) + Q * ((s[i, 1] - s_d[i, 1])^2 + (s[i, 2] - s_d[i, 2])^2) for i in 1:N_iter))
+    set_optimizer_attribute(model, "max_iter", mpc_solver_constants.optimizer_iterations)
     optimize!(model)
     return value.(s), value.(u)
 end
@@ -86,10 +87,10 @@ function simulation_loop(model_constants, constraint_constants, mpc_solver_const
     s_filtered = s_current
     time = 0.0
     s_d = generate_target_trajectory(time, mpc_solver_constants.N_iter, simulation_constants.dt)
-    s_old = zeros(100, 6)
-    s_old[:, 1] = LinRange(s_current[1], s_d[end, 1], 100)
-    s_old[:, 2] = LinRange(s_current[2], s_d[end, 2], 100)
-    u_old = zeros(100, 2)
+    s_old = zeros(mpc_solver_constants.N_iter, 6)
+    s_old[:, 1] = LinRange(s_current[1], s_d[end, 1], mpc_solver_constants.N_iter)
+    s_old[:, 2] = LinRange(s_current[2], s_d[end, 2], mpc_solver_constants.N_iter)
+    u_old = zeros(mpc_solver_constants.N_iter, 2)
 
     s_history = Vector{Vector{Float64}}()
     u_history = Vector{Vector{Float64}}()
@@ -115,10 +116,11 @@ end
 
 model_constants = (g=9.81, m=1, l=0.3, J=0.2 * 1 * 0.3 * 0.3)
 constraint_constants = (box_width=0.9, u_min=0.2 * model_constants.g / model_constants.m, u_max=0.6 * model_constants.g / model_constants.m)
-mpc_solver_constants = (N_state=6, T_final=1.0, N_iter=100, Q=10000.0, R=1.0)
-simulation_constants = (T_final=5.0, dt=0.01, noise_level=0.03, low_pass_factor=0.9)
-s, u = simulation_loop(model_constants, constraint_constants, mpc_solver_constants, simulation_constants)
-
+mpc_solver_constants = (N_state=6, T_final=2.0, N_iter=100, Q=10000.0, R=1.0, optimizer_iterations=5)
+simulation_constants = (T_final=5.0, dt=0.01, noise_level=0.0, low_pass_factor=0.9)
+@time begin
+    s, u = simulation_loop(model_constants, constraint_constants, mpc_solver_constants, simulation_constants)
+end
 target_x, target_y, constraint_x, constraint_y = generate_target_and_constraints(constraint_constants.box_width)
 p = plot(target_x, target_y, label="Target trajectory", legend=:topright, size=(600, 600), xlabel="x", ylabel="z")
 p = scatter!(constraint_x, constraint_y, label="Constraint", markersize=0.2)
